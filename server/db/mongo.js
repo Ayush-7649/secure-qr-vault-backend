@@ -1,18 +1,30 @@
 // /server/db/mongo.js
+import mongoose from 'mongoose';
 
-import mongoose from 'mongoose'; // ⬅️ FIX: Use import instead of require
+export default async function connectDB() {
+  const raw = process.env.MONGO_URI || 'MONGO_URI_NOT_SET';
 
-const connectDB = async () => {
+  function mask(uri) {
     try {
-        // Mongoose automatically handles connection pools and deprecated options now
-        await mongoose.connect(process.env.MONGO_URI); 
-        
-        console.log('✅ MongoDB connected');
-    } catch (err) {
-        console.error('❌ MongoDB connection error:', err.message);
-        // Exit the process on database failure
-        process.exit(1); 
+      // mask password between ://user: and @
+      return uri.replace(/(\/\/.*:)(.*?)(@)/, (m, a, b, c) => a + '***MASKED***' + c);
+    } catch (e) {
+      return 'MASK_ERROR';
     }
-};
+  }
 
-export default connectDB; // ⬅️ FIX: Use export default instead of module.exports
+  console.log('🔎 DEBUG — MONGO_URI (masked):', mask(raw));
+  console.log('🔎 DEBUG — Node Version:', process.version);
+  console.log('🔎 DEBUG — Working Directory:', process.cwd());
+
+  try {
+    // shorter timeout so errors appear quickly in logs
+    await mongoose.connect(raw, { connectTimeoutMS: 10000 });
+    console.log('✅ MongoDB connected');
+  } catch (err) {
+    console.error('❌ Mongo connect failed (message):', err && err.message ? err.message : err);
+    console.error('❌ Mongo connect failed (stack):', err && err.stack ? err.stack : err);
+    // rethrow so index.js sees it and process exits as before
+    throw err;
+  }
+}
