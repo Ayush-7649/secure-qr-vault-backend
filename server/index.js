@@ -22,7 +22,7 @@ const FRONTEND_URL_RAW = (process.env.FRONTEND_URL || "").trim();
 const PORT = process.env.PORT || 5000;
 
 /* ------------------------------------------------------
-   Sanitize FRONTEND_URL (handle cases where user pasted "FRONTEND_URL = https://...")
+   Sanitize FRONTEND_URL (handle accidental "FRONTEND_URL = ..." strings)
 ------------------------------------------------------ */
 const FRONTEND_URL = FRONTEND_URL_RAW.replace(/^\s*FRONTEND_URL\s*=\s*/i, "").trim();
 
@@ -35,7 +35,7 @@ const allowedOrigins = [
   "http://localhost:5000",      // backend local
 ];
 
-// If FRONTEND_URL env var is provided and not empty, prefer that (sanitized above)
+// If FRONTEND_URL env var is provided and not empty, allow it
 if (FRONTEND_URL) {
   allowedOrigins.push(FRONTEND_URL);
 }
@@ -43,14 +43,17 @@ if (FRONTEND_URL) {
 // Explicitly allow Vercel frontend as a fallback (safe to include)
 allowedOrigins.push("https://secure-qr-vault-frontend.vercel.app");
 
-console.log("CORS — allowed origins:", allowedOrigins);
+// Remove duplicates (clean array)
+const uniqueAllowedOrigins = Array.from(new Set(allowedOrigins));
+
+console.log("CORS — allowed origins:", uniqueAllowedOrigins);
 
 const corsOptions = {
   origin: (origin, callback) => {
     // allow requests with no origin (Postman, curl, server-to-server)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
+    if (uniqueAllowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
@@ -62,8 +65,16 @@ const corsOptions = {
   exposedHeaders: ["Authorization"],
 };
 
-// Use '/*' for wildcard so path parser won't throw; handle preflight via cors middleware
-app.options("/*", cors(corsOptions));
+// Handle OPTIONS preflight by invoking cors middleware manually for only OPTIONS requests.
+// Avoid registering app.options('*'|'/*') which can cause path-to-regexp errors in some envs.
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return cors(corsOptions)(req, res, next);
+  }
+  return next();
+});
+
+// Apply CORS for all other requests
 app.use(cors(corsOptions));
 app.use(express.json());
 
