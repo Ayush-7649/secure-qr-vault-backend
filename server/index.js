@@ -18,19 +18,24 @@ const app = express();
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 const PUBLIC_URL = (process.env.PUBLIC_URL || "").trim();
-const FRONTEND_URL = (process.env.FRONTEND_URL || "").trim();
+const FRONTEND_URL_RAW = (process.env.FRONTEND_URL || "").trim();
 const PORT = process.env.PORT || 5000;
+
+/* ------------------------------------------------------
+   Sanitize FRONTEND_URL (handle cases where user pasted "FRONTEND_URL = https://...")
+------------------------------------------------------ */
+const FRONTEND_URL = FRONTEND_URL_RAW.replace(/^\s*FRONTEND_URL\s*=\s*/i, "").trim();
 
 /* ------------------------------------------------------
    CORS POLICY (Simple, Clean, Localhost + Deployment)
 ------------------------------------------------------ */
 const allowedOrigins = [
   "http://localhost:5173",      // Vite front-end (dev)
-  "http://localhost:4173",      // In case Vite uses fallback port
-  "http://localhost:5000",      // Backend local
+  "http://localhost:4173",      // fallback port
+  "http://localhost:5000",      // backend local
 ];
 
-// If FRONTEND_URL env var is provided, prefer that
+// If FRONTEND_URL env var is provided and not empty, prefer that (sanitized above)
 if (FRONTEND_URL) {
   allowedOrigins.push(FRONTEND_URL);
 }
@@ -57,8 +62,8 @@ const corsOptions = {
   exposedHeaders: ["Authorization"],
 };
 
-// Ensure preflight OPTIONS requests are handled by cors middleware
-app.options("*", cors(corsOptions));
+// Use '/*' for wildcard so path parser won't throw; handle preflight via cors middleware
+app.options("/*", cors(corsOptions));
 app.use(cors(corsOptions));
 app.use(express.json());
 
