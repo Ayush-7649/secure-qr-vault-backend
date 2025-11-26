@@ -27,27 +27,38 @@ const PORT = process.env.PORT || 5000;
 const allowedOrigins = [
   "http://localhost:5173",      // Vite front-end (dev)
   "http://localhost:4173",      // In case Vite uses fallback port
-  "http://localhost:5000",      // Backend
+  "http://localhost:5000",      // Backend local
 ];
 
-// If frontend deployed, allow that too:
+// If FRONTEND_URL env var is provided, prefer that
 if (FRONTEND_URL) {
   allowedOrigins.push(FRONTEND_URL);
 }
 
+// Explicitly allow Vercel frontend as a fallback (safe to include)
+allowedOrigins.push("https://secure-qr-vault-frontend.vercel.app");
+
+console.log("CORS — allowed origins:", allowedOrigins);
+
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // Allow Postman, curl, etc.
+    // allow requests with no origin (Postman, curl, server-to-server)
+    if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
-    return callback(new Error("CORS: Origin not allowed → " + origin));
+    // Do NOT throw an error here. Return false so the cors middleware
+    // does not set CORS headers for disallowed origins (browser will block).
+    return callback(null, false);
   },
-  credentials: true,
+  credentials: true, // set true only if you use cookies/sessions cross-site
+  exposedHeaders: ["Authorization"],
 };
 
+// Ensure preflight OPTIONS requests are handled by cors middleware
+app.options("*", cors(corsOptions));
 app.use(cors(corsOptions));
 app.use(express.json());
 
@@ -63,6 +74,7 @@ app.get("/", (req, res) => {
 ------------------------------------------------------ */
 connectDB()
   .then(() => {
+    // mount routes after successful DB connection
     app.use("/api/auth", authRoutes);
     app.use("/api/vault", vaultRoutes);
 
@@ -75,10 +87,12 @@ connectDB()
       }
       if (FRONTEND_URL) {
         console.log(`🖥️ FRONTEND_URL allowed → ${FRONTEND_URL}`);
+      } else {
+        console.log("ℹ️ FRONTEND_URL not set; Vercel frontend is allowed by default in allowedOrigins.");
       }
     });
   })
   .catch((err) => {
-    console.error("❌ MongoDB connection failed:", err.message);
+    console.error("❌ MongoDB connection failed:", err && err.message ? err.message : err);
     process.exit(1);
   });
